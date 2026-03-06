@@ -2,6 +2,9 @@ import { useAlerts } from "@/hooks/use-dashboard";
 import { format } from "date-fns";
 import { Bell, AlertOctagon, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState ,useEffect} from "react";
+import { useLiveAlerts } from "@/hooks/use-live-alerts";
+
 
 const severityStyles = {
   critical: {
@@ -26,8 +29,23 @@ const severityStyles = {
   },
 };
 
+
+
 export default function AlertsPage() {
-  const { data: alerts, isLoading } = useAlerts();
+ const { data: alertsFromAPI, isLoading } = useAlerts();
+
+  const [alerts, setAlerts] = useState<any[]>(alertsFromAPI || []);
+
+  useLiveAlerts(setAlerts);
+
+  
+useEffect(() => {
+  if (alertsFromAPI) {
+    setAlerts(alertsFromAPI);
+  }
+}, [alertsFromAPI]);
+
+  
 
   if (isLoading) {
     return (
