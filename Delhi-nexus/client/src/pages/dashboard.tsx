@@ -5,15 +5,13 @@ import { Wind, Car, CloudRain, AlertTriangle } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState } from "react";
-import { useLiveAQI } from "@/hooks/use-live-aqi";
+import { io } from "socket.io-client";
+import { useEffect, useState } from "react";
+
+const socket = io("http://localhost:5000");
 
 export default function Dashboard() {
   const { data, isLoading, error } = useDashboardOverview();
-
-  const [pollutionData, setPollutionData] = useState(data?.pollution || []);
-
-  useLiveAQI(setPollutionData);
 
   if (isLoading) {
     return (
@@ -37,35 +35,16 @@ export default function Dashboard() {
   }
 
   // Calculate averages for stats
-const pollutionValues = (pollutionData || [])
-  .map(p => Number(p?.aqi))
-  .filter(v => !isNaN(v));
-
-const avgAqi =
-  pollutionValues.length > 0
-    ? Math.round(pollutionValues.reduce((a, b) => a + b, 0) / pollutionValues.length)
-    : 0;
-
-
-const trafficValues = (data.traffic || [])
-  .map(t => Number(t?.congestionIndex))
-  .filter(v => !isNaN(v));
-
-const avgCongestion =
-  trafficValues.length > 0
-    ? (trafficValues.reduce((a, b) => a + b, 0) / trafficValues.length).toFixed(1)
-    : "0.0";
-  
+  const avgAqi = Math.round(data.pollution.reduce((acc, curr) => acc + curr.aqi, 0) / (data.pollution.length || 1));
+  const avgCongestion = (data.traffic.reduce((acc, curr) => acc + curr.congestionIndex, 0) / (data.traffic.length || 1)).toFixed(1);
   const activeAlerts = data.alerts.filter(a => a.isActive === 1).length;
 
   // Prepare chart data (using mock history combined with current data for visual)
-const chartData = (pollutionData || []).map((item, i) => ({
-  time: format(new Date(Date.now() - (10 - i) * 3600000), "HH:mm"),
-  aqi: Number(item?.aqi) || 0,
-  traffic: Number(data.traffic?.[i]?.congestionIndex) * 20 || 0
-}));
-
-console.log("DASHBOARD DATA", data);
+  const chartData = data.pollution.map((item, i) => ({
+    time: format(new Date(Date.now() - (10 - i) * 3600000), 'HH:mm'),
+    aqi: item.aqi,
+    traffic: data.traffic[i % data.traffic.length]?.congestionIndex * 20 // Scale for visual
+  }));
 
   return (
     <>
@@ -117,7 +96,7 @@ console.log("DASHBOARD DATA", data);
           </div>
           <CityMap 
             trafficData={data.traffic} 
-             pollutionData={pollutionData}
+            pollutionData={data.pollution} 
             // alerts={data.alerts.filter(a => a.isActive === 1)}
           />
         </div>

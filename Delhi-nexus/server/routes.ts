@@ -54,155 +54,23 @@ export async function registerRoutes(
   const broadcastEvent = (type: string, data: any) => {
     io.emit(type, data);
   };
-/* ============================================
-   LIVE AQI STREAM
-============================================ */
 
-async function fetchLiveAQI() {
-
-  try {
-
-    const res = await axios.get(
-      `https://api.waqi.info/map/bounds/?latlng=28.40,76.90,28.90,77.40&token=${process.env.WAQI_KEY}`
-    );
-
-    const pollution = res.data.data.map((station: any) => ({
-      locationId: station.station.name.replace(/\s+/g, "_").toLowerCase(),
-      aqi: Number(station.aqi) || 0,
-      latitude: station.lat,
-      longitude: station.lon
-    }));
-
-    broadcastEvent("aqi_update", pollution);
-
-  } catch (err) {
-
-    console.error("AQI live fetch failed", err);
-
-  }
-
-}
-
-/* run every 20 seconds */
-
-setInterval(fetchLiveAQI, 20000);
   /* ============================================
      DASHBOARD
   ============================================ */
-app.get(api.dashboard.overview.path, async (req, res) => {
 
-  try {
+  app.get(api.dashboard.overview.path, async (req, res) => {
 
-    /* ---------- AQI FROM OPENAQ ---------- */
+    const [traffic, pollution, weather, alerts] =
+      await Promise.all([
+        storage.getLatestTraffic(),
+        storage.getLatestPollution(),
+        storage.getLatestWeather(),
+        storage.getActiveAlerts(),
+      ]);
 
-const aqiRes = await axios.get(
-  `https://api.waqi.info/map/bounds/?latlng=28.40,76.90,28.90,77.40&token=${process.env.WAQI_KEY}`
-);
-
-const pollution = aqiRes.data.data.map((station: any) => ({
-  locationId: station.station.name.replace(/\s+/g, "_").toLowerCase(),
-  aqi: station.aqi,
-  latitude: station.lat,
-  longitude: station.lon
-}));
-
-
-    /* ---------- WEATHER (FREE API) ---------- */
-
-    const weatherRes = await axios.get(
-      "https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current_weather=true&hourly=relativehumidity_2m"
-    );
-
-    const weather = {
-      temperature: weatherRes.data.current_weather.temperature,
-      humidity: weatherRes.data.hourly.relativehumidity_2m?.[0] ?? 40
-    };
-
-    
-
-
-
-    /* ---------- TRAFFIC MOCK (FREE DEMO) ---------- */
-
-    const traffic = pollution.map((p: any) => ({
-      locationId: p.locationId,
-      congestionIndex: Number((Math.random() * 10).toFixed(1))
-    }));
-
-
-    /* ---------- ALERT GENERATION ---------- */
-
-    const alerts: any[] = [];
-
-    pollution.forEach((p: any, i: number) => {
-
-      if (p.aqi > 200) {
-
-        alerts.push({
-          id: i,
-          severity: "high",
-          message: "Severe air pollution detected",
-          locationId: p.locationId,
-          timestamp: new Date(),
-          isActive: 1
-        });
-
-      }
-
-    });
-
-
-    res.json({
-      traffic,
-      pollution,
-      weather,
-      alerts
-    });
-
-  } catch (err) {
-
-    console.error("Dashboard API error:", err);
-
-    res.status(500).json({
-      message: "Dashboard data fetch failed"
-    });
-
-  }
-
-});
-
-/* ============================================
-   LIVE POLLUTION STREAM
-============================================ */
-
-async function fetchLivePollution() {
-  try {
-    const res = await axios.get(
-      `https://api.waqi.info/map/bounds/?latlng=28.40,76.90,28.90,77.40&token=${process.env.WAQI_KEY}`
-    );
-
-    const pollution = res.data.data.map((s: any) => {
-      const iaqi = s.iaqi || {};
-      return {
-        locationId: s.station?.name?.replace(/\s+/g, "_").toLowerCase() || "unknown",
-        aqi: Number(s.aqi) || 0,
-        pm25: Number(iaqi.pm25?.v) || 0,
-        pm10: Number(iaqi.pm10?.v) || 0,
-        no2: Number(iaqi.no2?.v) || 0,
-        latitude: s.lat,
-        longitude: s.lon,
-        timestamp: new Date().toISOString()
-      };
-    });
-
-    io.emit("pollution_update", pollution);
-  } catch (err) {
-    console.error("Live pollution fetch failed:", err);
-  }
-}
-
-// every 20 seconds
-setInterval(fetchLivePollution, 20000);
+    res.json({ traffic, pollution, weather, alerts });
+  });
 
   /* ============================================
      TRAFFIC
