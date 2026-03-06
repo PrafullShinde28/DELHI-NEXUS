@@ -18,20 +18,48 @@ export type HospitalEvent = {
   icuOccupied: number;
 
   oxygenStatus: "ok" | "low" | "critical";
+  compositeScore?: number;
 };
 
-type Store = {
-  hospitals: HospitalEvent[];
-  setHospitals: (hospitals: HospitalEvent[]) => void;
+export type CrimeEvent = {
+  id: number;
+  zone: string;
+  crimeType: string;
+  timestamp: number;
+};
+
+export type FloodEvent = {
+  locationName: string;
+  floodProbability: number;
+  riskLevel: string;
 };
 
 /* ============================= */
 /* STORE */
 /* ============================= */
 
-export const useResilienceStore = create<Store>(
-  (set: (fn: Partial<Store>) => void) => ({
-    hospitals: [],
-    setHospitals: (hospitals: HospitalEvent[]) => set({ hospitals }),
-  }),
-);
+type Store = {
+  hospitals: HospitalEvent[];
+  crimes: CrimeEvent[];
+  floods: FloodEvent[];
+
+  setHospitals: (data: HospitalEvent[]) => void;
+  setCrimes: (data: CrimeEvent[]) => void;
+  setFloods: (data: FloodEvent[]) => void;
+};
+
+/* ============================= */
+/* ZUSTAND */
+/* ============================= */
+
+export const useResilienceStore = create<Store>((set) => ({
+  hospitals: [],
+  crimes: [],
+  floods: [],
+
+  setHospitals: (data) => set({ hospitals: data }),
+
+  setCrimes: (data) => set({ crimes: data }),
+
+  setFloods: (data) => set({ floods: data }),
+}));
