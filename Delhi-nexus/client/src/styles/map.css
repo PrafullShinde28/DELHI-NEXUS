@@ -1,0 +1,187 @@
+/* ===============================
+   MAP CONTAINER
+================================= */
+.map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+/* VERY IMPORTANT:
+   Let markers receive clicks instead of canvas
+*/
+.map-container .maplibregl-canvas {
+  pointer-events: none;
+}
+
+/* Allow UI elements interaction */
+.map-container .maplibregl-marker,
+.map-container button,
+.map-container .maplibregl-popup,
+.map-container .maplibregl-control-container,
+.map-container .maplibregl-ctrl,
+.map-container .maplibregl-ctrl-group {
+  pointer-events: auto !important;
+}
+
+
+
+/* ===============================
+   POPUP DARK THEME
+================================= */
+.city-popup .maplibregl-popup-content {
+  background: rgba(18, 18, 22, 0.96);
+  color: #e5e7eb;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: system-ui, sans-serif;
+  box-shadow:
+    0 10px 25px rgba(0,0,0,0.5),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* popup arrow */
+.city-popup .maplibregl-popup-tip {
+  border-top-color: rgba(18,18,22,0.96) !important;
+}
+
+/* close button */
+.city-popup .maplibregl-popup-close-button {
+  color: #9ca3af;
+  font-size: 18px;
+  right: 8px;
+  top: 6px;
+}
+
+.city-popup .maplibregl-popup-close-button:hover {
+  color: #ffffff;
+  background: transparent;
+}
+
+/* headings */
+.city-popup h3 {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: #ffffff;
+}
+
+/* text lines */
+.city-popup p {
+  font-size: 13px;
+  color: #d1d5db;
+  margin: 2px 0;
+}
+
+.city-popup span {
+  color: #ffffff;
+}
+
+
+
+/* ===============================
+   MARKERS
+================================= */
+
+/* smooth hover animation */
+.maplibregl-marker button {
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.maplibregl-marker button:hover {
+  transform: scale(1.18);
+  filter: brightness(1.2);
+}
+
+/* alert bounce smoother */
+.maplibregl-marker svg {
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6));
+}
+
+
+
+/* ===============================
+   CLUSTER MARKERS
+================================= */
+
+.cluster-marker {
+  background: radial-gradient(circle at 30% 30%, #4f46e5, #1e1b4b);
+  border: 2px solid rgba(255,255,255,0.15);
+  color: white;
+  font-weight: bold;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  box-shadow:
+    0 6px 18px rgba(0,0,0,0.5),
+    inset 0 0 10px rgba(255,255,255,0.05);
+}
+
+.cluster-marker:hover {
+  transform: scale(1.15);
+}
+
+
+
+/* ===============================
+   MAP CONTROLS
+================================= */
+
+.maplibregl-ctrl-group {
+  background: rgba(20,20,24,0.8);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.maplibregl-ctrl button {
+  filter: invert(1);
+}
+
+.maplibregl-ctrl button:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+
+
+/* ===============================
+   HEATMAP SOFT LOOK
+================================= */
+
+.maplibregl-canvas-container canvas {
+  image-rendering: auto;
+  filter: saturate(1.05) contrast(1.05);
+}
+
+
+
+/* ===============================
+   LEGEND PANEL
+================================= */
+.map-legend {
+  background: rgba(18,18,22,0.88);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.45);
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.map-legend div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-legend span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}

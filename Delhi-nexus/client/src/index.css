@@ -1,0 +1,221 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap");
+@import url("mapbox-gl/dist/mapbox-gl.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =================================================
+   ROOT THEME
+================================================= */
+
+@layer base {
+  :root {
+    --font-sans: "Inter", sans-serif;
+    --font-display: "Space Grotesk", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+
+    /* Deep Space Smart City Theme */
+
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 222 47% 14%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 280 85% 55%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 350 89% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 35 100% 55%;
+    --warning-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+
+    --border: 222 47% 18%;
+    --input: 222 47% 18%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.75rem;
+
+    /* Severity Colors */
+
+    --severity-low: 142 71% 45%;
+    --severity-medium: 48 96% 53%;
+    --severity-high: 21 90% 48%;
+    --severity-critical: 0 84% 60%;
+
+    /* Glass Panels */
+
+    --glass-bg: rgba(10, 15, 26, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary;
+
+    font-family: var(--font-sans);
+
+    background-image:
+      radial-gradient(circle at 15% 50%, rgba(14,165,233,0.05) 0%, transparent 50%),
+      radial-gradient(circle at 85% 30%, rgba(168,85,247,0.05) 0%, transparent 50%);
+
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-semibold tracking-tight;
+  }
+
+  code, pre {
+    font-family: var(--font-mono);
+  }
+}
+
+/* =================================================
+   UTILITIES
+================================================= */
+
+@layer utilities {
+
+  /* Glass Panels */
+
+  .glass-panel {
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+
+  .glass-panel-glow {
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(14,165,233,0.2);
+    box-shadow:
+      0 0 20px rgba(14,165,233,0.1),
+      inset 0 0 20px rgba(14,165,233,0.05);
+  }
+
+  /* Gradient Text */
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 20px rgba(59,130,246,0.5);
+  }
+
+  /* Severity Helpers */
+
+  .severity-low {
+    @apply text-[hsl(var(--severity-low))];
+  }
+
+  .severity-medium {
+    @apply text-[hsl(var(--severity-medium))];
+  }
+
+  .severity-high {
+    @apply text-[hsl(var(--severity-high))];
+  }
+
+  .severity-critical {
+    @apply text-[hsl(var(--severity-critical))];
+  }
+
+  .bg-severity-low {
+    @apply bg-[hsl(var(--severity-low))];
+  }
+
+  .bg-severity-medium {
+    @apply bg-[hsl(var(--severity-medium))];
+  }
+
+  .bg-severity-high {
+    @apply bg-[hsl(var(--severity-high))];
+  }
+
+  .bg-severity-critical {
+    @apply bg-[hsl(var(--severity-critical))];
+  }
+
+  /* Map tooltip */
+
+  .map-tooltip {
+    @apply glass-panel rounded-lg p-3 text-sm z-50 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3;
+  }
+
+}
+
+/* =================================================
+   SCROLLBAR
+================================================= */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* =================================================
+   MAPBOX OVERRIDES
+================================================= */
+
+.mapboxgl-popup-content {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.mapboxgl-popup-tip {
+  display: none !important;
+}
+
+.mapboxgl-ctrl-bottom-right,
+.mapboxgl-ctrl-bottom-left {
+  display: none !important;
+}
+
+/* =================================================
+   RECHARTS DARK MODE FIX
+================================================= */
+
+.recharts-text {
+  fill: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: hsl(var(--border));
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
