@@ -13,7 +13,6 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-
 /* =================================================
    TRAFFIC DATA
 ================================================= */
@@ -80,15 +79,21 @@ export type WeatherData = typeof weatherData.$inferSelect;
 
 export const floodData = pgTable("flood_data", {
   id: serial("id").primaryKey(),
+
   locationName: text("location_name").notNull(),
-  latitude: numeric("latitude").notNull(),
-  longitude: numeric("longitude").notNull(),
-  rainfallIntensity: numeric("rainfall_intensity").notNull(),
-  waterLevel: numeric("water_level").notNull(),
-  drainageCapacity: numeric("drainage_capacity").notNull(),
-  soilSaturation: numeric("soil_saturation").notNull(),
-  floodProbability: numeric("flood_probability").notNull(),
+
+  latitude: text("latitude").notNull(),
+  longitude: text("longitude").notNull(),
+
+  rainfallIntensity: real("rainfall_intensity").notNull(),
+  waterLevel: real("water_level").notNull(),
+  drainageCapacity: real("drainage_capacity").notNull(),
+  soilSaturation: real("soil_saturation").notNull(),
+
+  floodProbability: real("flood_probability").notNull(),
+
   riskLevel: text("risk_level").notNull(),
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -106,22 +111,28 @@ export type InsertFloodData = z.infer<typeof insertFloodDataSchema>;
 
 export const cityHealthScore = pgTable("city_health_score", {
   id: serial("id").primaryKey(),
+
   locationName: text("location_name").notNull(),
-  trafficScore: numeric("traffic_score").notNull(),
-  aqiScore: numeric("aqi_score").notNull(),
-  crimeScore: numeric("crime_score").notNull(),
-  floodScore: numeric("flood_score").notNull(),
-  hospitalScore: numeric("hospital_score").notNull(),
-  compositeScore: numeric("composite_score").notNull(),
+
+  trafficScore: real("traffic_score").notNull(),
+  aqiScore: real("aqi_score").notNull(),
+  crimeScore: real("crime_score").notNull(),
+  floodScore: real("flood_score").notNull(),
+  hospitalScore: real("hospital_score").notNull(),
+
+  compositeScore: real("composite_score").notNull(),
+
   status: text("status").notNull(),
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCityHealthScoreSchema =
-  createInsertSchema(cityHealthScore).omit({
-    id: true,
-    createdAt: true,
-  });
+export const insertCityHealthScoreSchema = createInsertSchema(
+  cityHealthScore,
+).omit({
+  id: true,
+  createdAt: true,
+});
 
 export type CityHealthScore = typeof cityHealthScore.$inferSelect;
 export type InsertCityHealthScore = z.infer<typeof insertCityHealthScoreSchema>;
@@ -260,5 +271,5 @@ export const floodEvents = pgTable("flood_events", {
 
   riskLevel: text("risk_level").notNull(),
 
-  createdAt: timestamp("created_at").defaultNow().notNull()
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
