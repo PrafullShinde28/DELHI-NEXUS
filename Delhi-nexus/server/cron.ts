@@ -8,56 +8,88 @@ let io: SocketIOServer | null = null;
 // IMPORTANT: Docker service hostname
 const AI_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
 
-/* ---------------- TRAFFIC DATA ---------------- */
+/* ---------------- REAL TRAFFIC DATA (DELHI) ---------------- */
 
 async function fetchTrafficData() {
+
   const locations = [
-    "Connaught Place",
-    "Indira Gandhi Airport",
-    "India Gate",
-    "Hauz Khas",
-    "Chandni Chowk"
+    { name: "Connaught Place", lat: 28.6304, lng: 77.2177 },
+    { name: "Indira Gandhi Airport", lat: 28.5562, lng: 77.1000 },
+    { name: "India Gate", lat: 28.6129, lng: 77.2295 },
+    { name: "Hauz Khas", lat: 28.5494, lng: 77.2001 },
+    { name: "Chandni Chowk", lat: 28.6505, lng: 77.2303 }
   ];
 
   const newTrafficData = [];
 
   for (const loc of locations) {
-    const density = Math.floor(Math.random() * 100);
-    const congestion = (density / 100) * 10;
 
-    const traffic = await storage.createTrafficData({
-      locationId: loc,
-      vehicleDensity: density,
-      congestionIndex: congestion,
-      timestamp: new Date()
-    });
-
-    newTrafficData.push(traffic);
-
-    // ---- AI Anomaly Detection ----
     try {
-      const anomalyRes = await axios.post(`${AI_URL}/detect/anomaly`, {
-        value: density,
-        metric_type: "traffic"
+
+      const url =
+        `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${loc.lat},${loc.lng}&key=${process.env.TOMTOM_API_KEY}`;
+
+      const response = await axios.get(url);
+
+      const flow = response.data.flowSegmentData;
+
+      const currentSpeed = flow.currentSpeed;
+      const freeFlowSpeed = flow.freeFlowSpeed;
+
+      const congestionIndex =
+        ((freeFlowSpeed - currentSpeed) / freeFlowSpeed) * 10;
+
+      const traffic = await storage.createTrafficData({
+        locationId: loc.name,
+        vehicleDensity: currentSpeed,
+        congestionIndex: Number(congestionIndex.toFixed(2)),
+        timestamp: new Date()
       });
 
-      if (anomalyRes.data?.is_anomaly) {
-        const alert = await storage.createAlert({
-          type: "traffic_congestion",
-          severity: anomalyRes.data.severity,
-          message: `High traffic detected at ${loc}`,
-          locationId: loc,
-          isActive: 1
+      newTrafficData.push(traffic);
+
+      /* ---- AI Anomaly Detection ---- */
+
+      try {
+
+        const anomalyRes = await axios.post(`${AI_URL}/detect/anomaly`, {
+          value: currentSpeed,
+          metric_type: "traffic"
         });
 
-        io?.emit("alert_new", alert);
+        if (anomalyRes.data?.is_anomaly) {
+
+          const alert = await storage.createAlert({
+            type: "traffic_congestion",
+            severity: anomalyRes.data.severity,
+            message: `High congestion detected at ${loc.name}`,
+            locationId: loc.name,
+            isActive: 1
+          });
+
+          io?.emit("alert_new", alert);
+
+        }
+
+      } catch (aiErr: any) {
+
+        console.error("AI Service Error:", aiErr?.message);
+
       }
+
     } catch (err: any) {
-      console.error("AI Service Error (Traffic):", err?.message);
+
+      console.error(`Traffic API Error for ${loc.name}:`, err.message);
+
     }
+
   }
 
-  io?.emit("data_update", { type: "traffic", data: newTrafficData });
+  io?.emit("data_update", {
+    type: "traffic",
+    data: newTrafficData
+  });
+
 }
 
 /* ---------------- POLLUTION DATA ---------------- */
