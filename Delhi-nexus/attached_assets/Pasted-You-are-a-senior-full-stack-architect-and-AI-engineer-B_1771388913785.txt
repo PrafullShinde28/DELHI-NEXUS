@@ -1,0 +1,210 @@
+You are a senior full-stack architect and AI engineer.
+
+Build a production-ready AI-Powered Smart City Digital Dashboard focused on Delhi.
+
+The system must use microservices architecture and include real-time data ingestion, prediction, anomaly detection, and visualization.
+
+Tech Stack Requirements:
+
+Frontend:
+- React (Vite)
+- Tailwind CSS
+- Recharts
+- Mapbox GL
+- Socket.io client
+
+Backend (Main API Service):
+- Node.js
+- Express
+- MongoDB
+- Redis (caching)
+- Socket.io
+- Node-cron (for periodic API fetching)
+
+AI Microservice:
+- Python
+- FastAPI
+- Pandas
+- NumPy
+- Scikit-learn
+- Statsmodels (ARIMA)
+- Isolation Forest (anomaly detection)
+
+Deployment-ready structure using Docker for all services.
+
+------------------------------------------------------
+
+SYSTEM ARCHITECTURE:
+
+Services:
+
+1) frontend-service (React)
+2) api-gateway / backend-service (Node.js)
+3) ai-service (Python FastAPI)
+4) mongo-db
+5) redis-cache
+
+Use REST between frontend and backend.
+Use REST between backend and AI service.
+Use WebSockets for real-time frontend updates.
+
+------------------------------------------------------
+
+FEATURES TO IMPLEMENT:
+
+1) Real-Time Data Fetching:
+- Fetch traffic data from HERE API (mock if needed)
+- Fetch AQI + weather from OpenWeather API
+- Use cron job every 5 minutes
+- Cache responses in Redis
+- Store normalized data in MongoDB
+
+2) Data Models:
+
+MongoDB collections:
+
+traffic_data:
+- location_id
+- vehicle_density
+- congestion_index
+- timestamp
+
+pollution_data:
+- location_id
+- AQI
+- PM2_5
+- PM10
+- NO2
+- timestamp
+
+weather_data:
+- temperature
+- humidity
+- wind_speed
+- timestamp
+
+predictions:
+- type (traffic/pollution)
+- predicted_value
+- confidence_score
+- created_at
+
+alerts:
+- type
+- severity
+- message
+- location
+- status
+- timestamp
+
+------------------------------------------------------
+
+3) AI SERVICE LOGIC:
+
+Traffic Prediction:
+- Use ARIMA time-series model
+- Train using historical congestion data
+- Return 6-hour forecast
+
+Pollution Prediction:
+- Use RandomForestRegressor
+- Features:
+  - past AQI
+  - traffic density
+  - temperature
+  - humidity
+- Return next-day AQI forecast
+
+Anomaly Detection:
+- Use IsolationForest
+- Detect sudden spikes in:
+  - congestion
+  - AQI
+
+Endpoints in FastAPI:
+
+POST /predict/traffic
+POST /predict/pollution
+POST /detect/anomaly
+
+Return JSON responses.
+
+------------------------------------------------------
+
+4) BACKEND SERVICE LOGIC:
+
+- Cron job fetches external APIs
+- Normalize and store data
+- Expose endpoints:
+
+GET /dashboard/overview
+GET /traffic/current
+GET /pollution/current
+GET /weather/current
+GET /predictions
+GET /alerts
+
+- Communicate with AI service for predictions
+- Emit WebSocket updates to frontend
+
+------------------------------------------------------
+
+5) FRONTEND PAGES:
+
+A) Landing Page
+B) Login Page
+C) Main Dashboard
+   - Mapbox heatmap
+   - Live AQI badge
+   - Traffic trend chart
+   - Weather panel
+D) Traffic Analytics Page
+   - Congestion heatmap
+   - 6-hour forecast graph
+E) Pollution Analytics Page
+   - AQI heatmap
+   - Pollutant breakdown chart
+F) AI Predictions Page
+   - Forecast graphs
+   - Anomaly alerts
+G) Alerts Page
+   - Table with severity filter
+H) Settings Page
+
+Use clean dark theme UI.
+
+------------------------------------------------------
+
+6) ADVANCED FEATURES:
+
+- Redis caching for API optimization
+- Feature importance explanation for pollution model
+- Threshold-based alert generation
+- Docker Compose file for all services
+- Environment variable configuration
+- Proper folder structure for each service
+
+------------------------------------------------------
+
+7) NON-FUNCTIONAL REQUIREMENTS:
+
+- Modular clean architecture
+- Error handling
+- Logging
+- Input validation
+- Production-ready structure
+- Scalable microservices design
+
+------------------------------------------------------
+
+Deliverables:
+
+1) Folder structure for entire system
+2) Code for each service
+3) Docker Compose configuration
+4) Sample environment variables
+5) API documentation
+6) Setup instructions
+7) Explanation of data flow
+
+Generate everything step-by-step.

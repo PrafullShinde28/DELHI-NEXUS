@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    container_name: delhi-nexus-app
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/smartcity
+      REDIS_URL: redis://redis:6379
+      AI_SERVICE_URL: http://ai-service:5001
+      NODE_ENV: development
+      PORT: 5000
+    depends_on:
+      - db
+      - redis
+      - ai-service
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: delhi-nexus-ai-service
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: delhi-nexus-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: smartcity
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: delhi-nexus-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
