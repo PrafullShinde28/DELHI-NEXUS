@@ -3,19 +3,26 @@ import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@shared/routes";
+import { useResilienceStore } from "@/store/resilienceStore";
+import type { HospitalEvent } from "@/store/resilienceStore";
 
 export function useResilienceWebSocket() {
-
   const socketRef = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   useEffect(() => {
-
-    const socket = io({
+    /* ✅ FIXED CONNECTION */
+    const socket = io("http://localhost:5000", {
       path: "/socket.io",
       transports: ["websocket"],
     });
+
+    console.log("[WS] Connecting to Smart City Engine...");
+
+    const setHospitals = useResilienceStore.getState().setHospitals;
+
+    /* ================= CONNECT ================= */
 
     socket.on("connect", () => {
       console.log("[WS] Connected to Smart City Engine");
@@ -24,7 +31,6 @@ export function useResilienceWebSocket() {
     /* ================= Flood Alerts ================= */
 
     socket.on("flood_alert", (data: any) => {
-
       queryClient.invalidateQueries({
         queryKey: [api.flood.current.path],
       });
@@ -45,8 +51,7 @@ export function useResilienceWebSocket() {
 
     /* ================= City Health ================= */
 
-    socket.on("city_health_alert", () => {
-
+    socket.on("city_health_update", () => {
       queryClient.invalidateQueries({
         queryKey: [api.cityHealth.current.path],
       });
@@ -64,7 +69,6 @@ export function useResilienceWebSocket() {
     /* ================= Crime ================= */
 
     socket.on("crime_update", (data: any) => {
-
       queryClient.invalidateQueries({
         queryKey: [api.crime.list.path],
       });
@@ -76,24 +80,45 @@ export function useResilienceWebSocket() {
       });
     });
 
-    /* ================= Hospital ================= */
+    /* ================= Hospital (FINAL) ================= */
 
-    socket.on("hospital_update", (data: any) => {
+    socket.on("hospital_update", (data: any[]) => {
+      const transformed: HospitalEvent[] = data.map((h: any) => {
+        const oxygenStatus: HospitalEvent["oxygenStatus"] =
+          h.riskLevel === "critical"
+            ? "critical"
+            : Number(h.emergencyLoad) > 65
+              ? "low"
+              : "ok";
 
-      queryClient.invalidateQueries({
-        queryKey: [api.hospital.list.path],
+        return {
+          id: Number(h.osmId),
+          name: String(h.hospitalName),
+          lat: Number(h.latitude),
+          lng: Number(h.longitude),
+          zone: "Delhi",
+
+          totalBeds: 150,
+          occupiedBeds: 150 - Number(h.availableBeds),
+
+          icuTotal: 20,
+          icuOccupied: 20 - Number(h.icuBeds),
+
+          oxygenStatus,
+        };
       });
 
+      setHospitals(transformed);
+
       toast({
-        title: "🏥 Hospital Capacity Update",
-        description: `${data.name} bed capacity updated`,
+        title: "🏥 Hospital Network Update",
+        description: `${transformed.length} hospitals synchronized`,
       });
     });
 
     /* ================= Predictions ================= */
 
     socket.on("prediction_update", () => {
-
       queryClient.invalidateQueries({
         queryKey: [api.predictions.list.path],
       });
@@ -112,8 +137,8 @@ export function useResilienceWebSocket() {
 
     return () => {
       socket.disconnect();
+      console.log("[WS] Connection closed");
     };
-
   }, [queryClient, toast]);
 
   return socketRef.current;
