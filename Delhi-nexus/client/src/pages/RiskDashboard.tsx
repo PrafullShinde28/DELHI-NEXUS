@@ -1,101 +1,173 @@
-import { useMemo ,useState,useEffect} from "react";
+import { useMemo, useEffect, useState } from "react";
 import { Hexagon, Zap, Shield, AlertCircle } from "lucide-react";
 import { Source, Layer } from "react-map-gl";
 import {
-  RadialBarChart,
-  RadialBar,
-  Legend,
-  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   RadarChart,
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  Tooltip as RechartsTooltip,
 } from "recharts";
+
 import PageHeader from "@/components/layout/PageHeader";
 import MapContainer, { NCR_ZONES } from "@/components/map/MapContainer";
 import { useRiskData } from "@/hooks/use-risk";
 
-export default function RiskDashboard() {
-  type RiskEvent = {
-  id: number;
+/* ================= TYPES ================= */
+
+type RiskEvent = {
   zone: string;
   trafficScore: number;
   aqiScore: number;
   crimeScore: number;
   hospitalScore: number;
-  compositeScore: number;
+  compositeScore: number | string;
 };
- 
- 
-const [risks, setRisks] = useState<RiskEvent[]>([]);
-const isLoading = risks.length === 0;
+
+export default function RiskDashboard() {
+  const { data, isLoading } = useRiskData();
+  const risks: RiskEvent[] = data || [];
+
+  /* ================= HELPERS ================= */
 
   const getRiskColor = (score: number) => {
-    if (score > 80) return "#f43f5e"; // destructive
-    if (score > 60) return "#f59e0b"; // warning
-    if (score > 40) return "#eab308"; // yellow
-    return "#10b981"; // success
+    if (score > 80) return "#f43f5e";
+    if (score > 60) return "#f59e0b";
+    if (score > 40) return "#eab308";
+    return "#10b981";
   };
 
-  // Convert zones data into GeoJSON FeatureCollection for Mapbox circles
- const geoJsonData = useMemo(() => {
-  if (!risks) return null;
+  /* ================= KPI ANIMATION ================= */
 
-  return {
-    type: "FeatureCollection" as const,
-    features: risks
-      .map((risk) => {
-        const zoneInfo = NCR_ZONES.find((z) => z.name === risk.zone);
+  const [animatedScore, setAnimatedScore] = useState(0);
 
-        if (!zoneInfo || isNaN(zoneInfo.lat) || isNaN(zoneInfo.lng)) {
-          return null;
-        }
+  const avgThreat = Math.round(
+    risks.reduce((a, b) => a + Number(b.compositeScore || 0), 0) /
+      (risks.length || 1),
+  );
 
-        return {
-          type: "Feature" as const,
-          geometry: {
-            type: "Point" as const,
-            coordinates: [zoneInfo.lng, zoneInfo.lat],
-          },
-          properties: {
-            title: risk.zone,
-            score: risk.compositeScore,
-            color: getRiskColor(risk.compositeScore),
-            radius: Math.max(20, risk.compositeScore / 1.5),
-          },
-        };
-      })
-      .filter(Boolean) as any,
-  };
-}, [risks]);
+  useEffect(() => {
+    let frame: number;
+
+    const animate = () => {
+      setAnimatedScore((prev) => {
+        if (prev >= avgThreat) return avgThreat;
+        return prev + (avgThreat - prev) * 0.08;
+      });
+
+      frame = requestAnimationFrame(animate);
+    };
+
+    animate();
+    return () => cancelAnimationFrame(frame);
+  }, [avgThreat]);
+
+  /* ================= GEOJSON ================= */
+
+  const geoJsonData = useMemo(() => {
+    if (!risks.length) return null;
+
+    return {
+      type: "FeatureCollection" as const,
+      features: risks
+        .map((risk) => {
+          const zoneInfo = NCR_ZONES.find((z) => z.name === risk.zone);
+
+          if (!zoneInfo) return null;
+
+          return {
+            type: "Feature" as const,
+            geometry: {
+              type: "Point" as const,
+              coordinates: [zoneInfo.lng, zoneInfo.lat],
+            },
+            properties: {
+              title: risk.zone,
+              score: Math.round(Number(risk.compositeScore)),
+              color: getRiskColor(Number(risk.compositeScore)),
+              radius: Math.max(22, Number(risk.compositeScore) / 1.5),
+            },
+          };
+        })
+        .filter(Boolean) as any,
+    };
+  }, [risks]);
+
+  /* ================= RADAR ================= */
 
   const radarData = useMemo(() => {
-    if (!risks) return [];
-    // Average scores across all zones for macro view
-    const avgs = risks.reduce(
-      (acc, curr) => ({
-        traffic: acc.traffic + curr.trafficScore,
-        aqi: acc.aqi + curr.aqiScore,
-        crime: acc.crime + curr.crimeScore,
-        hospital: acc.hospital + curr.hospitalScore,
-      }),
-      { traffic: 0, aqi: 0, crime: 0, hospital: 0 },
-    );
+    if (!risks.length) return [];
 
-    const len = risks.length || 1;
+    const len = risks.length;
+
+    /* ===============================
+     1️⃣ BASE AVERAGE
+  =============================== */
+
+    let traffic = 0;
+    let aqi = 0;
+    let crime = 0;
+    let hospital = 0;
+
+    risks.forEach((r) => {
+      traffic += Number(r.trafficScore || 0);
+      aqi += Number(r.aqiScore || 0);
+      crime += Number(r.crimeScore || 0);
+      hospital += Number(r.hospitalScore || 0);
+    });
+
+    traffic /= len;
+    aqi /= len;
+    crime /= len;
+    hospital /= len;
+
+    /* ===============================
+     2️⃣ EXTREME ZONE BOOST
+     (real command-center logic)
+  =============================== */
+
+    const maxTraffic = Math.max(...risks.map((r) => Number(r.trafficScore)));
+    const maxAqi = Math.max(...risks.map((r) => Number(r.aqiScore)));
+    const maxCrime = Math.max(...risks.map((r) => Number(r.crimeScore)));
+    const maxHospital = Math.max(...risks.map((r) => Number(r.hospitalScore)));
+
+    traffic += maxTraffic * 0.15;
+    aqi += maxAqi * 0.15;
+    crime += maxCrime * 0.15;
+    hospital += maxHospital * 0.15;
+
+    /* ===============================
+     3️⃣ SYSTEM IMBALANCE SENSITIVITY
+  =============================== */
+
+    const spread =
+      Math.max(traffic, aqi, crime, hospital) -
+      Math.min(traffic, aqi, crime, hospital);
+
+    const imbalanceBoost = spread * 0.12;
+
+    traffic += imbalanceBoost;
+    aqi += imbalanceBoost;
+    crime += imbalanceBoost;
+    hospital += imbalanceBoost;
+
+    /* ===============================
+     FINAL NORMALIZATION
+  =============================== */
+
+    const clamp = (n: number) => Math.min(100, Math.round(n));
+
     return [
-      { subject: "Traffic", A: Math.round(avgs.traffic / len), fullMark: 100 },
-      { subject: "Air Quality", A: Math.round(avgs.aqi / len), fullMark: 100 },
-      { subject: "Crime", A: Math.round(avgs.crime / len), fullMark: 100 },
-      {
-        subject: "Health Load",
-        A: Math.round(avgs.hospital / len),
-        fullMark: 100,
-      },
+      { subject: "Traffic", A: clamp(traffic) },
+      { subject: "Air Quality", A: clamp(aqi) },
+      { subject: "Crime", A: clamp(crime) },
+      { subject: "Health Load", A: clamp(hospital) },
     ];
   }, [risks]);
+
+  /* ================= UI ================= */
 
   return (
     <div className="flex flex-col h-full bg-background relative">
@@ -106,7 +178,7 @@ const isLoading = risks.length === 0;
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Map View */}
+        {/* ================= MAP ================= */}
         <div className="flex-[3] relative border-r border-border/30">
           <MapContainer>
             {geoJsonData && (
@@ -115,13 +187,23 @@ const isLoading = risks.length === 0;
                   id="risk-circles"
                   type="circle"
                   paint={{
-                    "circle-radius": ["get", "radius"],
+                    "circle-radius": [
+                      "interpolate",
+                      ["linear"],
+                      ["zoom"],
+                      8,
+                      ["*", ["get", "radius"], 0.6],
+                      12,
+                      ["get", "radius"],
+                    ],
                     "circle-color": ["get", "color"],
-                    "circle-opacity": 0.4,
+                    "circle-opacity": 0.35,
                     "circle-stroke-width": 2,
                     "circle-stroke-color": ["get", "color"],
+                    "circle-blur": 0.2,
                   }}
                 />
+
                 <Layer
                   id="risk-labels"
                   type="symbol"
@@ -137,7 +219,7 @@ const isLoading = risks.length === 0;
                   }}
                   paint={{
                     "text-color": "#ffffff",
-                    "text-halo-color": "rgba(0,0,0,0.8)",
+                    "text-halo-color": "rgba(0,0,0,0.85)",
                     "text-halo-width": 2,
                   }}
                 />
@@ -145,113 +227,109 @@ const isLoading = risks.length === 0;
             )}
           </MapContainer>
 
-          <div className="absolute top-4 right-4 glass-panel p-4 rounded-xl w-64 border-t-2 border-t-warning">
-            <h4 className="font-semibold mb-2 text-sm flex items-center gap-2">
-              <Zap className="w-4 h-4 text-warning" /> City-wide Threat Level
+          {/* KPI CARD */}
+          <div className="absolute top-4 right-4 glass-panel p-5 rounded-xl w-64 border border-white/10 backdrop-blur-lg">
+            <h4 className="font-semibold mb-3 text-sm flex items-center gap-2">
+              <Zap className="w-4 h-4 text-warning" />
+              City-wide Threat Level
             </h4>
-            <div className="flex items-end gap-2 mb-1">
-              <span className="text-3xl font-display font-bold text-foreground">
-                {isLoading
-                  ? "..."
-                  : Math.round(
-                      risks?.reduce((a, b) => a + b.compositeScore, 0)! /
-                        (risks?.length || 1) || 0,
-                    )}
+
+            <div className="flex items-end gap-2 mb-2">
+              <span className="text-4xl font-display font-bold">
+                {Math.round(animatedScore)}
               </span>
-              <span className="text-sm text-muted-foreground pb-1">/ 100</span>
+              <span className="text-sm text-muted-foreground pb-1">/100</span>
             </div>
-            <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden mt-3">
-              <div className="h-full bg-gradient-to-r from-success via-warning to-destructive w-[65%] shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+
+            <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+              <div
+                className="h-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${animatedScore}%`,
+                  background:
+                    animatedScore > 80
+                      ? "#f43f5e"
+                      : animatedScore > 60
+                        ? "#f59e0b"
+                        : animatedScore > 40
+                          ? "#eab308"
+                          : "#10b981",
+                }}
+              />
             </div>
           </div>
         </div>
 
-        {/* Dashboard Side Panel */}
-        <div className="flex-[2] min-w-[400px] bg-card/40 backdrop-blur-md overflow-y-auto p-6 space-y-6">
+        {/* ================= RIGHT PANEL ================= */}
+        <div className="flex-[2] min-w-[420px] bg-card/40 backdrop-blur-md overflow-y-auto p-6 space-y-6">
+          {/* RADAR */}
           <div className="glass-panel p-5 rounded-2xl">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" /> Sector Radar
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-primary" />
+              Sector Radar
             </h3>
+
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart
-                  cx="50%"
-                  cy="50%"
-                  outerRadius="70%"
-                  data={radarData}
-                >
+                <RadarChart outerRadius="70%" data={radarData}>
                   <PolarGrid stroke="rgba(255,255,255,0.1)" />
                   <PolarAngleAxis
                     dataKey="subject"
-                    tick={{ fill: "rgba(255,255,255,0.6)", fontSize: 11 }}
+                    tick={{ fill: "rgba(255,255,255,0.65)", fontSize: 11 }}
                   />
                   <PolarRadiusAxis
-                    angle={30}
                     domain={[0, 100]}
                     tick={false}
                     axisLine={false}
                   />
+
                   <Radar
-                    name="NCR Average"
                     dataKey="A"
                     stroke="hsl(var(--primary))"
                     fill="hsl(var(--primary))"
-                    fillOpacity={0.4}
+                    fillOpacity={0.35}
                   />
-                  <RechartsTooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(15, 23, 42, 0.9)",
-                      borderColor: "rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                    }}
-                  />
+
+                  <RechartsTooltip />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
+          {/* TOP ZONES */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-destructive" /> Top
-              Vulnerable Zones
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              Top Vulnerable Zones
             </h3>
+
             {isLoading ? (
               <div className="text-sm p-4">Analyzing sectors...</div>
             ) : (
-              risks
-                ?.sort((a, b) => b.compositeScore - a.compositeScore)
+              [...risks]
+                .sort(
+                  (a, b) => Number(b.compositeScore) - Number(a.compositeScore),
+                )
                 .slice(0, 5)
                 .map((risk, i) => (
                   <div
-                    key={risk.id}
-                    className="glass-panel p-4 rounded-xl flex items-center gap-4 group hover:bg-white/5 transition-colors"
+                    key={i}
+                    className="glass-panel p-4 rounded-xl flex items-center gap-4 
+                    hover:bg-white/5 transition-all duration-300 ease-out"
                   >
-                    <div className="text-2xl font-bold font-mono text-white/20 w-6">
+                    <div className="text-2xl font-bold text-white/20 w-6">
                       {i + 1}
                     </div>
-                    <div className="flex-1">
-                      <div className="font-semibold text-foreground mb-1">
-                        {risk.zone}
-                      </div>
-                      <div className="flex gap-2 text-xs">
-                        <span className="bg-black/40 px-2 py-0.5 rounded border border-white/5 text-muted-foreground">
-                          AQI: {Math.round(risk.aqiScore)}
-                        </span>
-                        <span className="bg-black/40 px-2 py-0.5 rounded border border-white/5 text-muted-foreground">
-                          Crime: {Math.round(risk.crimeScore)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div
-                        className="text-xl font-display font-bold"
-                        style={{ color: getRiskColor(risk.compositeScore) }}
-                      >
-                        {Math.round(risk.compositeScore)}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground uppercase">
-                        Index
-                      </div>
+
+                    <div className="flex-1 font-semibold">{risk.zone}</div>
+
+                    <div
+                      className="text-xl font-display font-bold"
+                      style={{
+                        color: getRiskColor(Number(risk.compositeScore)),
+                      }}
+                    >
+                      {Math.round(Number(risk.compositeScore))}
                     </div>
                   </div>
                 ))

@@ -5,20 +5,20 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@shared/routes";
 import { useResilienceStore } from "@/store/resilienceStore";
 import type { HospitalEvent } from "@/store/resilienceStore";
+
 export function useResilienceWebSocket() {
   const socketRef = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   useEffect(() => {
-    const socket = io({
+    /* ✅ FIXED CONNECTION */
+    const socket = io("http://localhost:5000", {
       path: "/socket.io",
       transports: ["websocket"],
     });
 
     console.log("[WS] Connecting to Smart City Engine...");
-
-    /* ================= STORE ACCESS ================= */
 
     const setHospitals = useResilienceStore.getState().setHospitals;
 
@@ -80,10 +80,9 @@ export function useResilienceWebSocket() {
       });
     });
 
-    /* ================= Hospital (FIXED) ================= */
+    /* ================= Hospital (FINAL) ================= */
 
     socket.on("hospital_update", (data: any[]) => {
-      /* 🔹 TRANSFORM + TYPE SAFE */
       const transformed: HospitalEvent[] = data.map((h: any) => {
         const oxygenStatus: HospitalEvent["oxygenStatus"] =
           h.riskLevel === "critical"
@@ -111,12 +110,6 @@ export function useResilienceWebSocket() {
 
       setHospitals(transformed);
 
-      /* 🔹 OPTIONAL REFRESH */
-      queryClient.invalidateQueries({
-        queryKey: [api.hospital.list.path],
-      });
-
-      /* 🔹 TOAST */
       toast({
         title: "🏥 Hospital Network Update",
         description: `${transformed.length} hospitals synchronized`,

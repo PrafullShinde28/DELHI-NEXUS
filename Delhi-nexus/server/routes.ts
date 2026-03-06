@@ -10,6 +10,7 @@ import {
   initHospitals,
   startHospitalMonitoring,
 } from "./services/hospitalEngine";
+
 /* ===============================================
    NCR ZONES
 =============================================== */
@@ -34,10 +35,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
-  /* ============================================
-     SOCKET.IO
-  ============================================ */
-
   const io = new SocketIOServer(httpServer, {
     path: "/socket.io",
     cors: { origin: "*" },
@@ -45,7 +42,6 @@ export async function registerRoutes(
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
-
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
     });
@@ -54,22 +50,20 @@ export async function registerRoutes(
   startCronJobs(io);
   await initHospitals();
   startHospitalMonitoring(io);
-  const broadcastEvent = (type: string, data: any) => {
-    io.emit(type, data);
-  };
+
+  const broadcastEvent = (type: string, data: any) => io.emit(type, data);
 
   /* ============================================
      DASHBOARD
   ============================================ */
 
-  app.get(api.dashboard.overview.path, async (req, res) => {
+  app.get(api.dashboard.overview.path, async (_, res) => {
     const [traffic, pollution, weather, alerts] = await Promise.all([
       storage.getLatestTraffic(),
       storage.getLatestPollution(),
       storage.getLatestWeather(),
       storage.getActiveAlerts(),
     ]);
-
     res.json({ traffic, pollution, weather, alerts });
   });
 
@@ -77,31 +71,38 @@ export async function registerRoutes(
      TRAFFIC
   ============================================ */
 
-  app.get(api.traffic.current.path, async (req, res) => {
-    res.json(await storage.getLatestTraffic());
-  });
+  app.get(api.traffic.current.path, async (_, res) =>
+    res.json(await storage.getLatestTraffic()),
+  );
 
-  app.get(api.traffic.history.path, async (req, res) => {
-    res.json(await storage.getTrafficHistory());
-  });
+  app.get(api.traffic.history.path, async (_, res) =>
+    res.json(await storage.getTrafficHistory()),
+  );
+  /* ============================================
+   RISK ENGINE
+============================================ */
 
+  app.get(api.risk.list.path, async (_, res) => {
+    const data = await storage.getZoneRisks();
+    res.json(data);
+  });
   /* ============================================
      POLLUTION
   ============================================ */
 
-  app.get(api.pollution.current.path, async (req, res) => {
-    res.json(await storage.getLatestPollution());
-  });
+  app.get(api.pollution.current.path, async (_, res) =>
+    res.json(await storage.getLatestPollution()),
+  );
 
-  app.get(api.pollution.history.path, async (req, res) => {
-    res.json(await storage.getPollutionHistory());
-  });
+  app.get(api.pollution.history.path, async (_, res) =>
+    res.json(await storage.getPollutionHistory()),
+  );
 
   /* ============================================
      AI PREDICTIONS
   ============================================ */
 
-  app.post("/api/predictions/generate", async (req, res) => {
+  app.post("/api/predictions/generate", async (_, res) => {
     try {
       const trafficRes = await axios.post(
         "http://localhost:5001/predict/traffic",
@@ -149,35 +150,19 @@ export async function registerRoutes(
   });
 
   /* ============================================
-     FLOOD ENGINE (RESILIENCE)
+     FLOOD MOCK
   ============================================ */
 
-  app.get("/api/flood/current", async (req, res) => {
-    res.json(await storage.getLatestFloodData());
-  });
-
-  app.get("/api/flood/history", async (req, res) => {
-    res.json(await storage.getHistoricalFloodData());
-  });
-
-  app.post("/api/flood/mock", async (req, res) => {
+  app.post("/api/flood/mock", async (_, res) => {
     await generateMockFloodData(io);
     res.json({ message: "Flood data generated" });
   });
 
   /* ============================================
-     CITY HEALTH ENGINE
+     CITY HEALTH MOCK
   ============================================ */
 
-  app.get("/api/city-health/current", async (req, res) => {
-    res.json(await storage.getLatestCityHealth());
-  });
-
-  app.get("/api/city-health/history", async (req, res) => {
-    res.json(await storage.getHistoricalCityHealth());
-  });
-
-  app.post("/api/city-health/recalculate", async (req, res) => {
+  app.post("/api/city-health/recalculate", async (_, res) => {
     await generateMockCityHealthData(io);
     res.json({ message: "City health recalculated" });
   });
@@ -186,26 +171,20 @@ export async function registerRoutes(
      CRIME
   ============================================ */
 
-  app.get(api.crime.list.path, async (req, res) => {
-    res.json(await storage.getCrimeIncidents());
-  });
+  app.get(api.crime.list.path, async (_, res) =>
+    res.json(await storage.getCrimeIncidents()),
+  );
 
   app.post(api.crime.create.path, async (req, res) => {
     try {
       const input = api.crime.create.input.parse(req.body);
-
       const incident = await storage.createCrimeIncident(input);
-
       broadcastEvent("crime_update", incident);
-
       res.status(201).json(incident);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-        });
+        return res.status(400).json({ message: err.errors[0].message });
       }
-
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -214,23 +193,16 @@ export async function registerRoutes(
      HOSPITAL
   ============================================ */
 
-  app.get(api.hospital.list.path, async (req, res) => {
-    res.json(await storage.getHospitals());
-  });
+  app.get(api.hospital.list.path, async (_, res) =>
+    res.json(await storage.getHospitals()),
+  );
 
   app.put(api.hospital.update.path, async (req, res) => {
     const input = api.hospital.update.input.parse(req.body);
-
     const updated = await storage.updateHospital(Number(req.params.id), input);
-
     io.emit("hospital_update", [updated]);
-
     res.json(updated);
   });
-
-  /* ============================================
-     DATABASE SEED
-  ============================================ */
 
   await seedDatabase(io);
 
@@ -238,32 +210,9 @@ export async function registerRoutes(
 }
 
 /* ===============================================
-   FLOOD CALCULATION
+   FLOOD MOCK GENERATOR
 =============================================== */
 
-function calculateFloodRisk(
-  rainfall: number,
-  water: number,
-  drainage: number,
-  soil: number,
-) {
-  let probability =
-    rainfall * 0.4 + water * 0.3 + soil * 0.2 + (100 - drainage) * 0.1;
-
-  probability = Math.min(100, Math.max(0, probability));
-
-  let risk = "low";
-
-  if (probability > 80) risk = "critical";
-  else if (probability > 60) risk = "high";
-  else if (probability > 30) risk = "moderate";
-
-  return { probability, risk };
-}
-
-/* ===============================================
-   MOCK FLOOD DATA
-=============================================== */
 async function generateMockFloodData(io: SocketIOServer) {
   const data = NCR_ZONES.map((zone) => {
     const rainfall = Math.random() * 100;
@@ -271,55 +220,30 @@ async function generateMockFloodData(io: SocketIOServer) {
     const drainage = Math.random() * 100;
     const soil = Math.random() * 100;
 
-    const risk = calculateFloodRisk(rainfall, water, drainage, soil);
+    const probability =
+      rainfall * 0.4 + water * 0.3 + soil * 0.2 + (100 - drainage) * 0.1;
 
     return {
       locationName: zone.name,
       latitude: zone.lat.toString(),
       longitude: zone.lng.toString(),
-      rainfallIntensity: rainfall.toFixed(2),
-      waterLevel: water.toFixed(2),
-      drainageCapacity: drainage.toFixed(2),
-      soilSaturation: soil.toFixed(2),
-      floodProbability: risk.probability.toFixed(2),
-      riskLevel: risk.risk,
+      rainfallIntensity: Number(rainfall.toFixed(2)),
+      waterLevel: Number(water.toFixed(2)),
+      drainageCapacity: Number(drainage.toFixed(2)),
+      soilSaturation: Number(soil.toFixed(2)),
+      floodProbability: Number(probability.toFixed(2)),
+      riskLevel:
+        probability > 80 ? "critical" : probability > 60 ? "high" : "moderate",
     };
   });
 
   const inserted = await storage.insertFloodData(data);
-
   io.emit("flood_alert", inserted);
 }
 
 /* ===============================================
-   CITY HEALTH
+   CITY HEALTH MOCK GENERATOR
 =============================================== */
-
-function calculateCityHealthStatus(
-  traffic: number,
-  aqi: number,
-  crime: number,
-  flood: number,
-  hospital: number,
-) {
-  let composite =
-    traffic * 0.2 + aqi * 0.25 + crime * 0.2 + flood * 0.15 + hospital * 0.2;
-
-  composite = Math.min(100, Math.max(0, composite));
-
-  let status = "critical";
-
-  if (composite >= 80) {
-    status = "healthy";
-  } else if (composite >= 60) {
-    status = "moderate";
-  }
-
-  return {
-    composite,
-    status,
-  };
-}
 
 async function generateMockCityHealthData(io: SocketIOServer) {
   const data = NCR_ZONES.map((zone) => {
@@ -329,57 +253,35 @@ async function generateMockCityHealthData(io: SocketIOServer) {
     const flood = Math.random() * 100;
     const hospital = Math.random() * 100;
 
-    const { composite, status } = calculateCityHealthStatus(
-      traffic,
-      aqi,
-      crime,
-      flood,
-      hospital,
-    );
+    const composite =
+      traffic * 0.2 + aqi * 0.25 + crime * 0.2 + flood * 0.15 + hospital * 0.2;
 
     return {
       locationName: zone.name,
-      trafficScore: traffic.toFixed(2),
-      aqiScore: aqi.toFixed(2),
-      crimeScore: crime.toFixed(2),
-      floodScore: flood.toFixed(2),
-      hospitalScore: hospital.toFixed(2),
-      compositeScore: composite.toFixed(2),
-      status,
+      trafficScore: Number(traffic.toFixed(2)),
+      aqiScore: Number(aqi.toFixed(2)),
+      crimeScore: Number(crime.toFixed(2)),
+      floodScore: Number(flood.toFixed(2)),
+      hospitalScore: Number(hospital.toFixed(2)),
+      compositeScore: Number(composite.toFixed(2)),
+      status:
+        composite >= 80 ? "healthy" : composite >= 60 ? "moderate" : "critical",
     };
   });
 
   const inserted = await storage.insertCityHealthData(data);
-
   io.emit("city_health_update", inserted);
 }
 
 /* ===============================================
-   DATABASE SEED
+   SEED DATABASE
 =============================================== */
+
 async function seedDatabase(io: SocketIOServer) {
   const existing = await storage.getZoneRisks();
-
-  if (existing.length > 0) {
-    console.log("Seed skipped: zone risks already exist");
-    return;
-  }
-
-  console.log("Seeding NCR data...");
+  if (existing.length > 0) return;
 
   for (const zone of NCR_ZONES) {
-    await storage.createHospital({
-      name: `City Hospital ${zone.name}`,
-      zone: zone.name,
-      lat: zone.lat,
-      lng: zone.lng,
-      totalBeds: 500,
-      occupiedBeds: Math.floor(Math.random() * 500),
-      icuTotal: 50,
-      icuOccupied: Math.floor(Math.random() * 50),
-      oxygenStatus: "ok",
-    });
-
     await storage.createZoneRisk({
       zone: zone.name,
       lat: zone.lat,
