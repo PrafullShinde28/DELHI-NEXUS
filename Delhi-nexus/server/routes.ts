@@ -6,7 +6,10 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { startCronJobs } from "./cron";
 import axios from "axios";
-
+import {
+  initHospitals,
+  startHospitalMonitoring,
+} from "./services/hospitalEngine";
 /* ===============================================
    NCR ZONES
 =============================================== */
@@ -31,7 +34,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
-
   /* ============================================
      SOCKET.IO
   ============================================ */
@@ -50,7 +52,8 @@ export async function registerRoutes(
   });
 
   startCronJobs(io);
-
+  await initHospitals();
+  startHospitalMonitoring(io);
   const broadcastEvent = (type: string, data: any) => {
     io.emit(type, data);
   };
@@ -60,14 +63,12 @@ export async function registerRoutes(
   ============================================ */
 
   app.get(api.dashboard.overview.path, async (req, res) => {
-
-    const [traffic, pollution, weather, alerts] =
-      await Promise.all([
-        storage.getLatestTraffic(),
-        storage.getLatestPollution(),
-        storage.getLatestWeather(),
-        storage.getActiveAlerts(),
-      ]);
+    const [traffic, pollution, weather, alerts] = await Promise.all([
+      storage.getLatestTraffic(),
+      storage.getLatestPollution(),
+      storage.getLatestWeather(),
+      storage.getActiveAlerts(),
+    ]);
 
     res.json({ traffic, pollution, weather, alerts });
   });
@@ -101,9 +102,7 @@ export async function registerRoutes(
   ============================================ */
 
   app.post("/api/predictions/generate", async (req, res) => {
-
     try {
-
       const trafficRes = await axios.post(
         "http://localhost:5001/predict/traffic",
         { history: [50, 55, 60, 58, 62] },
@@ -143,12 +142,9 @@ export async function registerRoutes(
       });
 
       res.json({ traffic: trafficPred, pollution: pollutionPred });
-
     } catch (err) {
-
       console.error("Prediction Generation Error:", err);
       res.status(500).json({ message: "Prediction failed" });
-
     }
   });
 
@@ -195,9 +191,7 @@ export async function registerRoutes(
   });
 
   app.post(api.crime.create.path, async (req, res) => {
-
     try {
-
       const input = api.crime.create.input.parse(req.body);
 
       const incident = await storage.createCrimeIncident(input);
@@ -205,21 +199,15 @@ export async function registerRoutes(
       broadcastEvent("crime_update", incident);
 
       res.status(201).json(incident);
-
     } catch (err) {
-
       if (err instanceof z.ZodError) {
-
         return res.status(400).json({
           message: err.errors[0].message,
         });
-
       }
 
       res.status(500).json({ message: "Server error" });
-
     }
-
   });
 
   /* ============================================
@@ -231,15 +219,11 @@ export async function registerRoutes(
   });
 
   app.put(api.hospital.update.path, async (req, res) => {
-
     const input = api.hospital.update.input.parse(req.body);
 
-    const updated = await storage.updateHospital(
-      Number(req.params.id),
-      input,
-    );
+    const updated = await storage.updateHospital(Number(req.params.id), input);
 
-    broadcastEvent("hospital_update", updated);
+    io.emit("hospital_update", [updated]);
 
     res.json(updated);
   });
@@ -263,12 +247,8 @@ function calculateFloodRisk(
   drainage: number,
   soil: number,
 ) {
-
   let probability =
-    rainfall * 0.4 +
-    water * 0.3 +
-    soil * 0.2 +
-    (100 - drainage) * 0.1;
+    rainfall * 0.4 + water * 0.3 + soil * 0.2 + (100 - drainage) * 0.1;
 
   probability = Math.min(100, Math.max(0, probability));
 
@@ -285,20 +265,13 @@ function calculateFloodRisk(
    MOCK FLOOD DATA
 =============================================== */
 async function generateMockFloodData(io: SocketIOServer) {
-
   const data = NCR_ZONES.map((zone) => {
-
     const rainfall = Math.random() * 100;
     const water = Math.random() * 100;
     const drainage = Math.random() * 100;
     const soil = Math.random() * 100;
 
-    const risk = calculateFloodRisk(
-      rainfall,
-      water,
-      drainage,
-      soil
-    );
+    const risk = calculateFloodRisk(rainfall, water, drainage, soil);
 
     return {
       locationName: zone.name,
@@ -309,7 +282,7 @@ async function generateMockFloodData(io: SocketIOServer) {
       drainageCapacity: drainage.toFixed(2),
       soilSaturation: soil.toFixed(2),
       floodProbability: risk.probability.toFixed(2),
-      riskLevel: risk.risk
+      riskLevel: risk.risk,
     };
   });
 
@@ -327,15 +300,10 @@ function calculateCityHealthStatus(
   aqi: number,
   crime: number,
   flood: number,
-  hospital: number
+  hospital: number,
 ) {
-
   let composite =
-    traffic * 0.2 +
-    aqi * 0.25 +
-    crime * 0.2 +
-    flood * 0.15 +
-    hospital * 0.2;
+    traffic * 0.2 + aqi * 0.25 + crime * 0.2 + flood * 0.15 + hospital * 0.2;
 
   composite = Math.min(100, Math.max(0, composite));
 
@@ -354,9 +322,7 @@ function calculateCityHealthStatus(
 }
 
 async function generateMockCityHealthData(io: SocketIOServer) {
-
   const data = NCR_ZONES.map((zone) => {
-
     const traffic = Math.random() * 100;
     const aqi = Math.random() * 100;
     const crime = Math.random() * 100;
@@ -368,7 +334,7 @@ async function generateMockCityHealthData(io: SocketIOServer) {
       aqi,
       crime,
       flood,
-      hospital
+      hospital,
     );
 
     return {
@@ -379,7 +345,7 @@ async function generateMockCityHealthData(io: SocketIOServer) {
       floodScore: flood.toFixed(2),
       hospitalScore: hospital.toFixed(2),
       compositeScore: composite.toFixed(2),
-      status
+      status,
     };
   });
 
@@ -392,7 +358,6 @@ async function generateMockCityHealthData(io: SocketIOServer) {
    DATABASE SEED
 =============================================== */
 async function seedDatabase(io: SocketIOServer) {
-
   const existing = await storage.getZoneRisks();
 
   if (existing.length > 0) {
@@ -403,7 +368,6 @@ async function seedDatabase(io: SocketIOServer) {
   console.log("Seeding NCR data...");
 
   for (const zone of NCR_ZONES) {
-
     await storage.createHospital({
       name: `City Hospital ${zone.name}`,
       zone: zone.name,

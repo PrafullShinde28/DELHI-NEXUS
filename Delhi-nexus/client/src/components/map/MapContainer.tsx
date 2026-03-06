@@ -1,6 +1,8 @@
-import { useState } from "react";
 import maplibregl from "maplibre-gl";
-import Map, { NavigationControl, FullscreenControl } from "react-map-gl/maplibre";
+import Map, {
+  NavigationControl,
+  FullscreenControl,
+} from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const DEFAULT_MAP_STYLE =
@@ -15,19 +17,13 @@ export default function MapContainer({
   children,
   interactive = true,
 }: MapContainerProps) {
-
-  const [viewState, setViewState] = useState({
-    longitude: 77.209,
-    latitude: 28.6139,
-    zoom: 10.5,
-    pitch: 45,
-    bearing: -17.6,
-  });
-
   return (
     <Map
-      {...viewState}
-      onMove={(evt) => setViewState(evt.viewState)}
+      initialViewState={{
+        longitude: 77.209,
+        latitude: 28.6139,
+        zoom: 10.2,
+      }}
       mapStyle={DEFAULT_MAP_STYLE}
       mapLib={maplibregl}
       interactive={interactive}
@@ -41,7 +37,7 @@ export default function MapContainer({
   );
 }
 
-/* Delhi NCR Mock Zones */
+/* NCR Zones */
 
 export const NCR_ZONES = [
   { name: "Chandni Chowk", lat: 28.6505, lng: 77.2303 },
