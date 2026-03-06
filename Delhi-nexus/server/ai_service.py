@@ -1,13 +1,18 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import random
 import uvicorn
-from typing import List, Dict, Any
+from typing import List
+import numpy as np
+import random
 
-# Create FastAPI app
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
+
 app = FastAPI()
 
-# Pydantic models for request bodies
+# ---------------------------
+# DATA MODELS
+# ---------------------------
+
 class TrafficDataInput(BaseModel):
     history: List[float]
 
@@ -17,103 +22,243 @@ class PollutionDataInput(BaseModel):
     temperature: float
     humidity: float
 
-class PredictionResponse(BaseModel):
-    type: str
-    predicted_value: float
-    confidence_score: float
-    details: Dict[str, Any] = {}
+class CityPredictionInput(BaseModel):
+    traffic_density: float
+    aqi: float
+    temperature: float
+    humidity: float
 
 class AnomalyCheckInput(BaseModel):
     value: float
-    metric_type: str # 'traffic' or 'aqi'
+    metric_type: str
 
-class AnomalyResponse(BaseModel):
-    is_anomaly: bool
-    severity: str
-    score: float
+class TrainingData(BaseModel):
+    traffic_density: float
+    aqi: float
+    temperature: float
+    humidity: float
+
+class TrainRequest(BaseModel):
+    data: List[TrainingData]
+
+
+# ---------------------------
+# MODELS
+# ---------------------------
+
+traffic_model = RandomForestRegressor(n_estimators=150)
+aqi_model = RandomForestRegressor(n_estimators=150)
+anomaly_model = IsolationForest(contamination=0.1)
+
+model_trained = False
+
+
+# ---------------------------
+# HEALTH
+# ---------------------------
 
 @app.get("/health")
-def health_check():
+def health():
     return {"status": "healthy"}
+
+
+# ---------------------------
+# TRAIN MODEL
+# ---------------------------
+
+@app.post("/train")
+def train_model(req: TrainRequest):
+
+    global model_trained
+
+    X = []
+    y_traffic = []
+    y_aqi = []
+
+    for row in req.data:
+
+        X.append([
+            row.traffic_density,
+            row.aqi,
+            row.temperature,
+            row.humidity
+        ])
+
+        # Convert density → congestion index (0–4)
+        congestion = min(4, row.traffic_density / 25)
+
+        y_traffic.append(congestion)
+        y_aqi.append(row.aqi)
+
+    X = np.array(X)
+
+    traffic_model.fit(X, y_traffic)
+    aqi_model.fit(X, y_aqi)
+
+    anomaly_model.fit(np.array(y_traffic).reshape(-1,1))
+
+    model_trained = True
+
+    return {
+        "status": "model trained",
+        "samples": len(X)
+    }
+
+
+# ---------------------------
+# TRAFFIC PREDICTION
+# ---------------------------
 
 @app.post("/predict/traffic")
 def predict_traffic(data: TrafficDataInput):
-    # Mock ARIMA model logic
-    # In production, load a trained model (statsmodels)
-    
-    # Simple logic: assume trend continues with some noise
-    last_val = data.history[-1] if data.history else 50.0
-    
-    # Simulate prediction (random fluctuation around last value)
-    predicted_val = last_val * (1 + random.uniform(-0.1, 0.15))
-    predicted_val = max(0, min(100, predicted_val)) # Clamp 0-100
-    
-    confidence = random.uniform(0.7, 0.95)
-    
+
+    history = data.history if data.history else [50]
+
+    avg = np.mean(history)
+    trend = history[-1]
+
+    X = np.array([[trend, avg, 30, 60]])
+
+    if model_trained:
+        prediction = traffic_model.predict(X)[0]
+    else:
+        prediction = trend * random.uniform(0.9,1.1)
+
     return {
         "type": "traffic",
-        "predicted_value": round(predicted_val, 2),
-        "confidence_score": round(confidence, 2),
-        "details": {"method": "ARIMA-Mock", "horizon": "1h"}
+        "predicted_value": round(float(prediction),2),
+        "confidence_score": 0.85
     }
+
+
+# ---------------------------
+# AQI PREDICTION
+# ---------------------------
 
 @app.post("/predict/pollution")
 def predict_pollution(data: PollutionDataInput):
-    # Mock Random Forest logic
-    # Higher traffic + low wind (not passed but assumed) + temp inversion = high AQI
-    
-    base_aqi = data.aqi_history[-1] if data.aqi_history else 100.0
-    
-    # Factors
-    traffic_factor = data.traffic_density / 100.0 # 0.0 to 1.0
-    weather_factor = 1.0
-    if data.temperature > 30:
-        weather_factor = 1.1 # Heat can increase ozone
-    
-    predicted_aqi = base_aqi * 0.8 + (traffic_factor * 50) + (random.uniform(-10, 20))
-    predicted_aqi = max(0, predicted_aqi)
-    
+
+    base_aqi = data.aqi_history[-1] if data.aqi_history else 120
+
+    X = np.array([[
+
+        data.traffic_density,
+        base_aqi,
+        data.temperature,
+        data.humidity
+
+    ]])
+
+    if model_trained:
+        prediction = aqi_model.predict(X)[0]
+    else:
+        prediction = base_aqi * random.uniform(0.95,1.05)
+
     return {
         "type": "pollution",
-        "predicted_value": round(predicted_aqi, 2),
-        "confidence_score": round(random.uniform(0.75, 0.9), 2),
-        "details": {"method": "RandomForest-Mock", "drivers": ["traffic", "temp"]}
+        "predicted_value": round(float(prediction),2),
+        "confidence_score": 0.88
     }
+
+
+# ---------------------------
+# CITY FORECAST
+# ---------------------------
+
+@app.post("/predict/city")
+def predict_city(data: CityPredictionInput):
+
+    forecasts = []
+
+    traffic = data.traffic_density
+    aqi = data.aqi
+
+    for hour in range(1,7):
+
+        X = np.array([[traffic, aqi, data.temperature, data.humidity]])
+
+        if model_trained:
+
+            traffic_pred = traffic_model.predict(X)[0]
+            aqi_pred = aqi_model.predict(X)[0]
+
+        else:
+
+            traffic_pred = traffic * random.uniform(0.9,1.1)
+            aqi_pred = aqi * random.uniform(0.95,1.05)
+
+        # Add small variation
+        traffic_pred += random.uniform(-0.2,0.2)
+        aqi_pred += random.uniform(-8,8)
+
+        # Convert to congestion index (0–4)
+        congestion_index = float(np.clip(traffic_pred,0,4))
+
+        forecasts.append({
+            "hour": hour,
+            "traffic": round(congestion_index,2),
+            "aqi": round(float(max(0,aqi_pred)),2)
+        })
+
+        # Next hour influence
+        traffic = traffic_pred
+        aqi = aqi_pred
+
+    return {
+        "forecasts": forecasts,
+        "confidence": round(random.uniform(0.80,0.92),2)
+    }
+
+
+# ---------------------------
+# ANOMALY DETECTION
+# ---------------------------
 
 @app.post("/detect/anomaly")
 def detect_anomaly(data: AnomalyCheckInput):
-    # Mock Isolation Forest logic
-    # Uses a threshold based logic for this demo
-    
+
     is_anomaly = False
     severity = "none"
     score = 0.0
-    
+
     if data.metric_type == "traffic":
-        if data.value > 85:
+
+        if data.value > 3.5:
+            is_anomaly = True
+            severity = "critical"
+            score = 0.95
+
+        elif data.value > 2.8:
             is_anomaly = True
             severity = "high"
-            score = 0.9
-        elif data.value > 70:
-            is_anomaly = True
-            severity = "medium"
-            score = 0.6
-            
+            score = 0.8
+
+
     elif data.metric_type == "aqi":
+
         if data.value > 300:
             is_anomaly = True
             severity = "critical"
             score = 0.95
+
         elif data.value > 200:
             is_anomaly = True
             severity = "high"
             score = 0.8
-            
+
+
     return {
-        "is_anomaly": is_anomaly,
+        "is_anomaly": bool(is_anomaly),
         "severity": severity,
-        "score": score
+        "score": float(score)
     }
+
+
+# ---------------------------
+# SERVER START
+# ---------------------------
+
+print("AI Service started. Waiting for training data...")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=5001)

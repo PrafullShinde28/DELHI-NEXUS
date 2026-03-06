@@ -111,7 +111,11 @@ export interface IStorage {
    DATABASE STORAGE IMPLEMENTATION
 ================================================= */
 
+
+
 export class DatabaseStorage implements IStorage {
+
+
 
   /* ================= TRAFFIC ================= */
 
@@ -159,6 +163,15 @@ export class DatabaseStorage implements IStorage {
 
     return result;
   }
+
+  async getWeatherHistory(limit = 200) {
+  return await db
+    .select()
+    .from(weatherData)
+    .orderBy(desc(weatherData.timestamp))
+    .limit(limit);
+}
+  
 
   /* ================= PREDICTIONS ================= */
 
