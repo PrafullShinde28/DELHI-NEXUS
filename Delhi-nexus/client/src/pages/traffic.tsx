@@ -9,43 +9,57 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from "recharts";
 
 import { format } from "date-fns";
 import { Car } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const socket = io("http://localhost:5000");
+/* ================= SOCKET ================= */
+
+const socket = io("http://localhost:5000", {
+  transports: ["websocket"],
+});
+
+/* ================= COMPONENT ================= */
 
 export default function TrafficPage() {
-
   const { data: trafficHistory, isLoading } = useTrafficHistory();
   const [liveTraffic, setLiveTraffic] = useState<any[]>([]);
 
-  /* ---------------- INITIAL LOAD ---------------- */
+  /* ================= INITIAL LOAD ================= */
 
   useEffect(() => {
-    if (trafficHistory) {
-      setLiveTraffic(trafficHistory);
+    if (trafficHistory?.length) {
+      setLiveTraffic(trafficHistory.slice(0, 40));
     }
   }, [trafficHistory]);
 
-  /* ---------------- REAL-TIME SOCKET ---------------- */
+  /* ================= REALTIME SOCKET ================= */
 
   useEffect(() => {
-
     const handler = (msg: any) => {
+      if (!msg || msg.type !== "traffic" || !Array.isArray(msg.data)) return;
 
-      if (msg.type === "traffic") {
+      const latest = msg.data[0];
+      if (!latest?.timestamp) return;
 
-        setLiveTraffic((prev) => [
-          ...msg.data,
-          ...prev
-        ].slice(0, 50));
+      setLiveTraffic((prev) => {
+        const updated = [latest, ...prev];
 
-      }
+        /* remove duplicates */
+        const unique = updated.filter(
+          (v, i, arr) =>
+            arr.findIndex(
+              (x) =>
+                new Date(x.timestamp).getTime() ===
+                new Date(v.timestamp).getTime(),
+            ) === i,
+        );
 
+        return unique.slice(0, 40);
+      });
     };
 
     socket.on("data_update", handler);
@@ -53,10 +67,9 @@ export default function TrafficPage() {
     return () => {
       socket.off("data_update", handler);
     };
-
   }, []);
 
-  /* ---------------- LOADING ---------------- */
+  /* ================= LOADING ================= */
 
   if (isLoading) {
     return (
@@ -67,25 +80,29 @@ export default function TrafficPage() {
     );
   }
 
-  /* ---------------- CHART DATA ---------------- */
+  /* ================= CHART DATA ================= */
 
-  const chartData =
-    liveTraffic?.slice(0, 50).map((item) => ({
-      time: format(new Date(item.timestamp), "hh:mm a"),
-      congestion: item.congestionIndex,
-      density: item.vehicleDensity
-    })) || [];
+  const chartData = [...liveTraffic]
+    .sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    )
+    .map((item) => ({
+      time: format(new Date(item.timestamp), "HH:mm:ss"),
+      congestion: Number(item.congestionIndex || 0),
+      density: Number(item.vehicleDensity || 0),
+    }));
 
-  /* ---------------- LIVE METRICS ---------------- */
+  /* ================= LIVE METRICS ================= */
 
   const peakRecord = liveTraffic.length
     ? liveTraffic.reduce((max, curr) =>
-        curr.congestionIndex > max.congestionIndex ? curr : max
+        curr.congestionIndex > max.congestionIndex ? curr : max,
       )
     : null;
 
   const peakTime = peakRecord
-    ? format(new Date(peakRecord.timestamp), "hh:mm a")
+    ? format(new Date(peakRecord.timestamp), "HH:mm:ss")
     : "--";
 
   const avgCongestion = liveTraffic.length
@@ -99,37 +116,28 @@ export default function TrafficPage() {
     ? liveTraffic.reduce((sum, t) => sum + t.vehicleDensity, 0)
     : 0;
 
+  /* ================= UI ================= */
+
   return (
     <>
-      {/* Header */}
-
+      {/* HEADER */}
       <div className="flex items-center justify-between mb-8">
-
         <div>
-          <h1 className="text-3xl font-bold font-display">
-            Traffic Analytics
-          </h1>
-
+          <h1 className="text-3xl font-bold font-display">Traffic Analytics</h1>
           <p className="text-muted-foreground">
-            Deep dive into vehicle density and congestion patterns
+            Real-time congestion monitoring across key city zones
           </p>
         </div>
 
         <div className="bg-primary/10 p-3 rounded-full">
           <Car className="w-8 h-8 text-primary" />
         </div>
-
       </div>
 
-      {/* Stats */}
-
+      {/* STATS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-
         <div className="glass-panel p-6 rounded-2xl">
-
-          <h3 className="text-lg font-medium mb-1">
-            Peak Congestion Time
-          </h3>
+          <h3 className="text-lg font-medium mb-1">Peak Congestion Time</h3>
 
           <div className="text-4xl font-bold font-display text-red-400">
             {peakTime}
@@ -138,14 +146,10 @@ export default function TrafficPage() {
           <p className="text-sm text-muted-foreground mt-2">
             Average index {avgCongestion}/10
           </p>
-
         </div>
 
         <div className="glass-panel p-6 rounded-2xl">
-
-          <h3 className="text-lg font-medium mb-1">
-            Total Vehicle Flow
-          </h3>
+          <h3 className="text-lg font-medium mb-1">Total Vehicle Flow</h3>
 
           <div className="text-4xl font-bold font-display text-blue-400">
             {totalFlow}
@@ -154,25 +158,16 @@ export default function TrafficPage() {
           <p className="text-sm text-muted-foreground mt-2">
             Vehicles recorded in last hour
           </p>
-
         </div>
-
       </div>
 
-      {/* Congestion Chart */}
-
+      {/* CHART */}
       <div className="glass-panel p-6 rounded-2xl mb-8">
-
-        <h3 className="font-semibold mb-6">
-          Congestion Trends
-        </h3>
+        <h3 className="font-semibold mb-6">Congestion Trends (Realtime)</h3>
 
         <div className="h-[400px]">
-
           <ResponsiveContainer width="100%" height="100%">
-
             <LineChart data={chartData}>
-
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke="rgba(255,255,255,0.1)"
@@ -190,12 +185,13 @@ export default function TrafficPage() {
                 stroke="#64748b"
                 tickLine={false}
                 axisLine={false}
+                domain={[0, 10]} // ✅ fixed scaling
               />
 
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#0f172a",
-                  border: "1px solid #1e293b"
+                  border: "1px solid #1e293b",
                 }}
               />
 
@@ -205,97 +201,12 @@ export default function TrafficPage() {
                 stroke="#3b82f6"
                 strokeWidth={3}
                 dot={false}
-                activeDot={{ r: 6 }}
+                isAnimationActive={false}
               />
-
             </LineChart>
-
           </ResponsiveContainer>
-
         </div>
-
       </div>
-
-      {/* Location Breakdown */}
-
-      <div className="glass-panel rounded-2xl overflow-hidden">
-
-        <div className="p-6 border-b border-white/5">
-          <h3 className="font-semibold">
-            Location Breakdown
-          </h3>
-        </div>
-
-        <div className="overflow-x-auto">
-
-          <table className="w-full text-sm text-left">
-
-            <thead className="text-muted-foreground bg-white/5">
-
-              <tr>
-                <th className="px-6 py-4 font-medium">Location</th>
-                <th className="px-6 py-4 font-medium">Congestion Index</th>
-                <th className="px-6 py-4 font-medium">Vehicle Density</th>
-                <th className="px-6 py-4 font-medium">Last Updated</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-              </tr>
-
-            </thead>
-
-            <tbody className="divide-y divide-white/5">
-
-              {liveTraffic.slice(0, 5).map((row) => (
-
-                <tr key={row.id} className="hover:bg-white/5">
-
-                  <td className="px-6 py-4 font-medium capitalize">
-                    {row.locationId}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    {row.congestionIndex.toFixed(1)}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    {row.vehicleDensity}
-                  </td>
-
-                  <td className="px-6 py-4 font-mono text-muted-foreground">
-                    {format(new Date(row.timestamp), "hh:mm:ss a")}
-                  </td>
-
-                  <td className="px-6 py-4">
-
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        row.congestionIndex > 7
-                          ? "bg-red-500/20 text-red-400"
-                          : row.congestionIndex > 4
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : "bg-green-500/20 text-green-400"
-                      }`}
-                    >
-                      {row.congestionIndex > 7
-                        ? "High"
-                        : row.congestionIndex > 4
-                        ? "Moderate"
-                        : "Normal"}
-                    </span>
-
-                  </td>
-
-                </tr>
-
-              ))}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
     </>
   );
 }
