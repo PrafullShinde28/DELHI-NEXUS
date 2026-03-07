@@ -3,7 +3,7 @@ import "dotenv/config";
 import { db } from "./db.ts";
 import { floodEvents } from "../shared/schema.ts";
 import { lt } from "drizzle-orm";
-
+import { fetchRealTraffic } from "./services/trafficEngine";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.ts";
 import { serveStatic } from "./static.ts";
@@ -46,6 +46,8 @@ setInterval(
   },
   60 * 60 * 1000,
 );
+
+setInterval(fetchRealTraffic, 15000);
 
 /* ===================================================== */
 /* RAW BODY SUPPORT */
