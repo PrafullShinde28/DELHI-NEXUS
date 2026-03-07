@@ -35,6 +35,30 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+
+   /* ============================================
+   ALERTS
+============================================ */
+
+app.get(api.alerts.list.path, async (req, res) => {
+
+  try {
+
+    const alerts = await storage.getActiveAlerts();
+
+    res.json(alerts);
+
+  } catch (err) {
+
+    console.error("Alerts fetch error:", err);
+
+    res.status(500).json({
+      message: "Failed to fetch alerts"
+    });
+
+  }
+
+});
   /* ================= SOCKET ================= */
 
   const io = new SocketIOServer(httpServer, {
@@ -94,54 +118,72 @@ export async function registerRoutes(
   );
 
   /* ================= AI PREDICTION ================= */
+  app.post("/api/predictions/train", async (req,res)=>{
 
-  app.post("/api/predictions/generate", async (_, res) => {
-    try {
-      const trafficRes = await axios.post(
-        "http://localhost:5001/predict/traffic",
-        { history: [50, 55, 60, 58, 62] },
-      );
+  const traffic = await storage.getTrafficHistory();
+  const pollution = await storage.getPollutionHistory();
+  const weather = await storage.getWeatherHistory();
 
-      const pollutionRes = await axios.post(
-        "http://localhost:5001/predict/pollution",
-        {
-          aqi_history: [150, 160, 155, 170],
-          traffic_density: 80,
-          temperature: 30,
-          humidity: 40,
-        },
-      );
+  const dataset = traffic.map((t,i)=>({
 
-      const trafficPred = await storage.createPrediction({
-        type: "traffic",
-        locationId: "Delhi-General",
-        predictedValue: trafficRes.data.predicted_value,
-        confidenceScore: trafficRes.data.confidence_score,
-        forecastTime: new Date(Date.now() + 3600000),
-        details: trafficRes.data.details,
-      });
+    traffic_density: t.vehicleDensity,
 
-      const pollutionPred = await storage.createPrediction({
-        type: "pollution",
-        locationId: "Delhi-General",
-        predictedValue: pollutionRes.data.predicted_value,
-        confidenceScore: pollutionRes.data.confidence_score,
-        forecastTime: new Date(Date.now() + 86400000),
-        details: pollutionRes.data.details,
-      });
+    aqi: pollution[i]?.aqi ?? 150,
 
-      broadcast("prediction_update", {
-        traffic: trafficPred,
-        pollution: pollutionPred,
-      });
+    temperature: weather[i]?.temperature ?? 30,
 
-      res.json({ traffic: trafficPred, pollution: pollutionPred });
-    } catch (err) {
-      console.error("Prediction error:", err);
-      res.status(500).json({ message: "Prediction failed" });
-    }
-  });
+    humidity: weather[i]?.humidity ?? 60
 
+  }))
+
+  const ai = await axios.post(
+    "http://localhost:5001/train",
+    { data: dataset }
+  )
+
+  res.json(ai.data)
+
+})
+
+app.post("/api/predictions/generate", async (req,res)=>{
+
+  try{
+
+    const traffic = await storage.getLatestTraffic();
+    const pollution = await storage.getLatestPollution();
+    const weather = await storage.getLatestWeather();
+
+    const trafficDensity =
+      traffic.reduce((a,b)=>a+b.vehicleDensity,0)/traffic.length;
+
+    const avgAqi =
+      pollution.reduce((a,b)=>a+b.aqi,0)/pollution.length;
+
+    const ai = await axios.post(
+      "http://localhost:5001/predict/city",
+      {
+        traffic_density: trafficDensity,
+        aqi: avgAqi,
+        temperature: weather?.temperature ?? 30,
+        humidity: weather?.humidity ?? 60
+      }
+    );
+
+    const forecasts = ai.data.forecasts;
+
+    res.json(forecasts);
+
+  }catch(err){
+
+    console.error("Prediction error:",err);
+
+    res.status(500).json({
+      message:"Prediction generation failed"
+    });
+
+  }
+
+});
   /* ================= CRIME ================= */
 
   app.get(api.crime.list.path, async (_, res) =>
