@@ -6,11 +6,38 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { io } from "socket.io-client";
-import { useEffect, useState } from "react";
+import { useEffect, useState,useRef } from "react";
 
 const socket = io("http://localhost:5000");
 
+
 export default function Dashboard() {
+  const socketRef = useRef(io("http://localhost:5000"));
+const [liveAlerts, setLiveAlerts] = useState<any[]>([]);
+
+useEffect(() => {
+
+  const handleNewAlert = (alert: any) => {
+
+    setLiveAlerts(prev => {
+
+      const exists = prev.find(a => a.id === alert.id);
+      if (exists) return prev;
+
+      return [alert, ...prev];
+
+    });
+
+  };
+
+  socketRef.current.on("alert_new", handleNewAlert);
+
+  return () => {
+    socketRef.current.off("alert_new", handleNewAlert);
+  };
+
+}, []);
+  
   const { data, isLoading, error } = useDashboardOverview();
 
   if (isLoading) {
@@ -37,7 +64,8 @@ export default function Dashboard() {
   // Calculate averages for stats
   const avgAqi = Math.round(data.pollution.reduce((acc, curr) => acc + curr.aqi, 0) / (data.pollution.length || 1));
   const avgCongestion = (data.traffic.reduce((acc, curr) => acc + curr.congestionIndex, 0) / (data.traffic.length || 1)).toFixed(1);
-  const activeAlerts = data.alerts.filter(a => a.isActive === 1).length;
+const allAlerts = [...liveAlerts, ...(data.alerts || [])];
+const activeAlerts = allAlerts.filter(a => a.isActive === 1).length;
 
   // Prepare chart data (using mock history combined with current data for visual)
   const chartData = data.pollution.map((item, i) => ({
@@ -109,7 +137,7 @@ export default function Dashboard() {
               Recent Alerts
             </h3>
             <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-              {data.alerts.slice(0, 5).map(alert => (
+              {allAlerts.slice(0, 5).map(alert => (
                 <div key={alert.id} className="p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
                   <div className="flex justify-between items-start mb-1">
                     <span className={`text-xs font-bold px-1.5 py-0.5 rounded capitalize 

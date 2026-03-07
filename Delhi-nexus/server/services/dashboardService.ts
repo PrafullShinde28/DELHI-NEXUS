@@ -19,11 +19,11 @@ export async function getDashboardData() {
     // WEATHER DATA
     const weatherRes = await axios.get(WEATHER_URL);
 
-    const weather = {
-      temperature: weatherRes.data.current_weather.temperature,
-      humidity:
-        weatherRes.data.hourly.relativehumidity_2m?.[0] ?? 40
-    };
+   const weather = {
+    temperature: weatherRes.data.current_weather.temperature,
+    humidity: weatherRes.data.hourly.relativehumidity_2m?.[0] ?? 40,
+    precipitation: weatherRes.data.hourly.precipitation?.[0] ?? 0
+  };
 
     // MOCK TRAFFIC (since free APIs limited)
     const traffic = pollution.slice(0, 10).map((p: any) => ({

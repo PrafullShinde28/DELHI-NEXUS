@@ -2,6 +2,12 @@ import { useAlerts } from "@/hooks/use-dashboard";
 import { format } from "date-fns";
 import { Bell, AlertOctagon, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { io } from "socket.io-client";
+import { useEffect, useState, useRef } from "react";
+
+/* ===============================
+   SEVERITY STYLES
+================================ */
 
 const severityStyles = {
   critical: {
@@ -27,7 +33,50 @@ const severityStyles = {
 };
 
 export default function AlertsPage() {
-  const { data: alerts, isLoading } = useAlerts();
+
+  const { data: apiAlerts, isLoading } = useAlerts();
+
+  const [liveAlerts, setLiveAlerts] = useState<any[]>([]);
+
+  const socketRef = useRef(io("http://localhost:5000"));
+
+  /* ===============================
+     SOCKET LISTENER
+  ================================= */
+
+  useEffect(() => {
+
+    const handleNewAlert = (alert:any) => {
+
+      setLiveAlerts(prev => {
+
+        const exists = prev.find(a => a.id === alert.id);
+
+        if (exists) return prev;
+
+        return [alert, ...prev];
+
+      });
+
+    };
+
+    socketRef.current.on("alert_new", handleNewAlert);
+
+    return () => {
+      socketRef.current.off("alert_new", handleNewAlert);
+    };
+
+  }, []);
+
+  /* ===============================
+     MERGE ALERTS
+  ================================= */
+
+  const alerts = [...liveAlerts, ...(apiAlerts || [])];
+
+  /* ===============================
+     LOADING
+  ================================= */
 
   if (isLoading) {
     return (
@@ -37,10 +86,14 @@ export default function AlertsPage() {
     );
   }
 
+  /* ===============================
+     UI
+  ================================= */
+
   return (
     <div className="space-y-8">
 
-      {/* Header */}
+      {/* HEADER */}
 
       <div className="flex items-center justify-between">
 
@@ -60,33 +113,28 @@ export default function AlertsPage() {
 
       </div>
 
-      {/* Alerts List */}
+      {/* ALERT LIST */}
 
       <div className="grid gap-4">
 
-        {alerts?.map((alert, index) => {
-        const style =
-          severityStyles[alert.severity as keyof typeof severityStyles] ??
-          severityStyles.low;
+        {alerts.map((alert, index) => {
+
+          const style =
+            severityStyles[alert.severity as keyof typeof severityStyles] ??
+            severityStyles.low;
+
           return (
             <motion.div
               key={alert.id}
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`
-                glass-panel p-6 rounded-xl border-l-4 flex items-start gap-4
-                ${style.border} ${style.bg}
-              `}
+              className={`glass-panel p-6 rounded-xl border-l-4 flex items-start gap-4 ${style.border} ${style.bg}`}
             >
-
-              {/* Icon */}
 
               <div className={`mt-1 p-2 rounded-full ${style.icon}`}>
                 <AlertOctagon className="w-5 h-5" />
               </div>
-
-              {/* Alert Content */}
 
               <div className="flex-1">
 
@@ -127,21 +175,16 @@ export default function AlertsPage() {
 
               </div>
 
-              {/* Action */}
-
               <button className="p-2 hover:bg-white/10 rounded-lg transition-colors group">
-
                 <CheckCircle2 className="w-5 h-5 text-muted-foreground group-hover:text-green-400" />
-
               </button>
 
             </motion.div>
           );
+
         })}
 
-        {/* Empty State */}
-
-        {alerts?.length === 0 && (
+        {alerts.length === 0 && (
 
           <div className="text-center py-24 bg-card/40 rounded-2xl border border-dashed border-border/40">
 
@@ -164,4 +207,3 @@ export default function AlertsPage() {
     </div>
   );
 }
-
